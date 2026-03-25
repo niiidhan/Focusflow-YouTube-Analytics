@@ -22,6 +22,10 @@ function dateWithOffset(offsetDays) {
   return d.toLocaleDateString('en-CA');
 }
 
+function cleanTitle(title) {
+  return (title || '').replace(/^\(\d+\)\s*/, '').trim();
+}
+
 function dateRangeSet(period) {
   const dates = new Set();
   const today = new Date();
@@ -51,13 +55,35 @@ let currentTab = 'channels';
 // ─── Data loading ───────────────────────────────────────────────────────────
 
 function loadAndRender() {
-  chrome.storage.local.get(null, (all) => {
-    const sessions = [];
-    for (const [key, val] of Object.entries(all)) {
-      if (!key.startsWith('session_')) continue;
-      sessions.push(val);
-    }
-    render(sessions);
+  // Before reading from storage, tell all YouTube tabs to flush their current session.
+  // This ensures background tabs (which might be throttled) update their stats.
+  chrome.tabs.query({ url: 'https://www.youtube.com/*' }, (tabs) => {
+    const promises = tabs.map(t => {
+      return new Promise((resolve) => {
+        chrome.tabs.sendMessage(t.id, { type: 'FORCE_FLUSH' }, () => {
+          // ignore result, if it fails (not injected yet) just ignore
+          if (chrome.runtime.lastError) {}
+          resolve();
+        });
+      });
+    });
+
+    // Wait short time or proceed anyway
+    Promise.all(promises).finally(() => {
+      chrome.storage.local.get(null, (all) => {
+        const sessions = [];
+        for (const [key, val] of Object.entries(all)) {
+          if (!key.startsWith('session_')) continue;
+          const cleanedTitle = cleanTitle(val.title);
+          if (cleanedTitle !== val.title) {
+            val.title = cleanedTitle;
+            chrome.storage.local.set({ [key]: val }); // Fix dirty titles in storage permanently
+          }
+          sessions.push(val);
+        }
+        render(sessions);
+      });
+    });
   });
 }
 
@@ -344,6 +370,12 @@ document.getElementById('clearDataBtn').addEventListener('click', () => {
   });
 });
 
+// Night Mode Toggle
+document.getElementById('nightModeBtn').addEventListener('click', () => {
+  const isLight = document.body.classList.toggle('light-mode');
+  chrome.storage.local.set({ theme: isLight ? 'light' : 'night' });
+});
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 
 loadAndRender();
@@ -355,4 +387,11 @@ setInterval(loadAndRender, 5000);
 chrome.storage.onChanged.addListener((changes) => {
   const hasSessionChange = Object.keys(changes).some(k => k.startsWith('session_'));
   if (hasSessionChange) loadAndRender();
+});
+
+// Initialize Theme
+chrome.storage.local.get(['theme'], (res) => {
+  if (res.theme === 'light') {
+    document.body.classList.add('light-mode');
+  }
 });

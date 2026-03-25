@@ -13,33 +13,7 @@ const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets';
 
 // ─── Tab activity monitoring ───────────────────────────────────────────────
 
-chrome.tabs.onActivated.addListener(async ({ tabId }) => {
-  // Notify all YT tabs about activation state
-  const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
-  for (const tab of tabs) {
-    try {
-      await chrome.tabs.sendMessage(tab.id, {
-        type: tab.id === tabId ? 'TAB_ACTIVATED' : 'TAB_DEACTIVATED',
-      });
-    } catch (_) {
-      // Ignore errors from tabs that don't have the content script loaded yet
-    }
-  }
-});
-
-chrome.windows.onFocusChanged.addListener(async (windowId) => {
-  if (windowId === chrome.windows.WINDOW_ID_NONE) {
-    // Browser lost focus — pause all YT tracking
-    const tabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
-    for (const tab of tabs) {
-      try {
-        await chrome.tabs.sendMessage(tab.id, { type: 'TAB_DEACTIVATED' });
-      } catch (_) {
-        // Ignore errors from tabs that don't have the content script loaded or are being closed
-      }
-    }
-  }
-});
+// Tab activity monitoring: no longer deactivated to support background tracking.
 
 // ─── Alarms for batch sync ─────────────────────────────────────────────────
 
@@ -124,6 +98,14 @@ async function syncPendingToSheets() {
   } catch {
     return; // Not authenticated yet
   }
+
+  const ytTabs = await chrome.tabs.query({ url: 'https://www.youtube.com/*' });
+  await Promise.all(ytTabs.map(t => new Promise(resolve => {
+    chrome.tabs.sendMessage(t.id, { type: 'FORCE_FLUSH' }, () => {
+      if (chrome.runtime.lastError) {}
+      resolve();
+    });
+  })));
 
   const stored = await new Promise((r) => chrome.storage.local.get(['spreadsheetId', 'pendingSync'], r));
   spreadsheetId = stored.spreadsheetId;

@@ -43,7 +43,10 @@
   function getTitle() {
     // document.title is updated by YouTube's router BEFORE the DOM elements
     // — making it the fastest and most reliable title source during SPA nav.
-    const docTitle = document.title.replace(/ - YouTube$/, '').trim();
+    const docTitle = document.title
+      .replace(/^\(\d+\)\s*/, '') // Remove notification counts like (1) or (418)
+      .replace(/ - YouTube$/, '')
+      .trim();
     if (docTitle && docTitle !== 'YouTube' && docTitle.length > 0) return docTitle;
 
     return (
@@ -186,14 +189,8 @@
 
   // ─── Tab / window visibility ────────────────────────────────────────────────
 
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-      pauseTracking();
-    } else {
-      // Only resume if the video is actually playing
-      if (videoEl && !videoEl.paused) startTracking();
-    }
-  });
+  // Visibility tracking removed to allow background watch time recording.
+  // We rely solely on video element play/pause/ended events.
 
   // ─── Video / URL change detection (SPA) ───────────────────────────────────
 
@@ -248,13 +245,13 @@
         if (videoEl) {
           obs.disconnect();
           attachVideoListeners(videoEl);
-          if (!videoEl.paused && !document.hidden) startTracking();
+          if (videoEl && !videoEl.paused) startTracking();
         }
       });
       obs.observe(document.body, { childList: true, subtree: true });
     } else {
       attachVideoListeners(videoEl);
-      if (!videoEl.paused && !document.hidden) startTracking();
+      if (videoEl && !videoEl.paused) startTracking();
     }
 
     startFlushLoop();
@@ -310,10 +307,12 @@
     // Synchronous storage write isn't possible, but we've been flushing regularly
   });
 
-  // ─── Messages from background (tab deactivated) ────────────────────────────
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === 'TAB_DEACTIVATED') pauseTracking();
-    if (msg.type === 'TAB_ACTIVATED'  && videoEl && !videoEl.paused) startTracking();
+  // Support forced flushes from popup or background script
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'FORCE_FLUSH') {
+      flushSession().then(() => sendResponse({ ok: true }));
+      return true; // async
+    }
   });
 
 })();
