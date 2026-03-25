@@ -4,7 +4,6 @@
 Focusflow is a high-end Chrome extension that tracks exactly how you spend your time on YouTube. It provides a visual, actionable dashboard to monitor your daily, weekly, and monthly watch history with zero distraction.
 
 
-
 ## ✨ Features
 *   **Live Metrics**: Instant tracking of watch time per video and channel.
 *   **Actionable Dashboard**: Breakdown stats for Today, Last 7 Days, and Monthly trends.
