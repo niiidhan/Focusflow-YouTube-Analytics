@@ -46,7 +46,7 @@ function showToast(msg, duration = 2500) {
 // ─── State ─────────────────────────────────────────────────────────────────
 
 let currentPeriod = 'today';
-let currentTab = 'videos';
+let currentTab = 'channels';
 
 // ─── Data loading ───────────────────────────────────────────────────────────
 
@@ -93,14 +93,23 @@ function render(sessions) {
   document.getElementById('heroChannels').textContent = channelList.length;
   document.getElementById('ringProgress').style.strokeDashoffset = offset;
 
-  // ── Aggregate per-video (latest entry per videoId)
+  // ── Aggregate per-video (sum across sessions)
   const videoMap = {};
   for (const s of filtered) {
-    if (!videoMap[s.videoId] || s.totalSecs > videoMap[s.videoId].totalSecs) {
-      videoMap[s.videoId] = s;
+    if (!videoMap[s.videoId]) {
+      videoMap[s.videoId] = { ...s };
+    } else {
+      videoMap[s.videoId].totalSecs += s.totalSecs || 0;
+      // Keep the most recent endTime
+      if (new Date(s.endTime) > new Date(videoMap[s.videoId].endTime)) {
+        videoMap[s.videoId].endTime = s.endTime;
+        videoMap[s.videoId].title = s.title; // update title/channel if changed
+        videoMap[s.videoId].channel = s.channel;
+      }
     }
   }
-  const videoList = Object.values(videoMap).sort((a, b) => b.totalSecs - a.totalSecs);
+  // Videos: Most recent first
+  const videoList = Object.values(videoMap).sort((a, b) => new Date(b.endTime) - new Date(a.endTime));
 
   // ── Render lists
   if (currentTab === 'videos') {
